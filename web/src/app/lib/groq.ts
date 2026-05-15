@@ -89,25 +89,26 @@ ${postDescriptions}`;
     
     console.log(`[Gemini] Response length: ${text.length} chars for ${posts.length} posts`);
 
-    // Parse response for each post
+    // Split response into sections — Gemini may use "POST N:" headers or just sequential RELEVANCE_SCORE blocks
+    const sections: string[] = [];
+    
+    // Try splitting by "POST N:" headers first
+    const postHeaderPattern = /POST\s*\d+[:\s]/gi;
+    if (postHeaderPattern.test(text)) {
+      // Has POST headers — split by them
+      const splits = text.split(/POST\s*\d+[:\s]/i).filter((s) => s.trim());
+      sections.push(...splits);
+    } else {
+      // No POST headers — split by RELEVANCE_SCORE occurrences
+      const splits = text.split(/(?=RELEVANCE_SCORE:)/i).filter((s) => s.trim());
+      sections.push(...splits);
+    }
+
     return posts.map((post, i) => {
-      const postNum = i + 1;
-      const nextPostNum = i + 2;
-
-      // Find the section for this post (between POST N and POST N+1)
-      const startPattern = new RegExp(`POST\\s*${postNum}[:\\s]`, "i");
-      const endPattern = new RegExp(`POST\\s*${nextPostNum}[:\\s]`, "i");
-
-      const startMatch = text.match(startPattern);
-      if (!startMatch || startMatch.index === undefined) {
-        return { ...post, ai_score: 0, ai_reasoning: `No POST ${postNum} found in response (${text.length} chars): ${text.slice(0, 200)}`, ai_comment: "" };
+      const section = sections[i] || "";
+      if (!section) {
+        return { ...post, ai_score: 0, ai_reasoning: `No section ${i + 1} of ${sections.length} found`, ai_comment: "" };
       }
-
-      const startIdx = startMatch.index;
-      const endMatch = text.slice(startIdx + 5).match(endPattern);
-      const section = endMatch && endMatch.index !== undefined
-        ? text.slice(startIdx, startIdx + 5 + endMatch.index)
-        : text.slice(startIdx);
 
       const scoreM = section.match(/RELEVANCE_SCORE:\s*(\d+)/i);
       const reasonM = section.match(/REASONING:\s*(.+)/i);
@@ -122,7 +123,7 @@ ${postDescriptions}`;
         };
       }
 
-      return { ...post, ai_score: 0, ai_reasoning: `Parse failed. Section: ${section.slice(0, 150)}`, ai_comment: "" };
+      return { ...post, ai_score: 0, ai_reasoning: `Parse failed: ${section.slice(0, 100)}`, ai_comment: "" };
     });
   } catch (err) {
     console.error(`[Gemini] Error: ${err}`);

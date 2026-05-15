@@ -100,7 +100,7 @@ ${postDescriptions}`;
 
       const startMatch = text.match(startPattern);
       if (!startMatch || startMatch.index === undefined) {
-        return { ...post, ai_score: 0, ai_reasoning: "Could not parse AI response for this post", ai_comment: "" };
+        return { ...post, ai_score: 0, ai_reasoning: `No POST ${postNum} found in response (${text.length} chars): ${text.slice(0, 200)}`, ai_comment: "" };
       }
 
       const startIdx = startMatch.index;

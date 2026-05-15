@@ -193,7 +193,7 @@ function PostCard({ post, onStatusChange }: { post: ScoredPost; onStatusChange: 
   );
 }
 
-const POLL_INTERVAL = 30 * 60; // Poll Reddit every 30 minutes
+const POLL_INTERVAL = 3 * 60 * 60; // Poll Reddit every 3 hours
 const REFRESH_INTERVAL = 5000; // Refresh displayed posts every 5 seconds
 
 export default function Home() {
@@ -367,7 +367,7 @@ export default function Home() {
 
         {lastPoll && (
           <div className="text-sm text-gray-500">
-            Last poll: {new Date(lastPoll).toLocaleTimeString()} · Polls every 30 min · {filteredPosts.length} of {scoredPosts.length} posts shown
+            Last poll: {new Date(lastPoll).toLocaleTimeString()} · Polls every 3 hrs · {filteredPosts.length} of {scoredPosts.length} posts shown
           </div>
         )}
 

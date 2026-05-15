@@ -61,19 +61,25 @@ ${postDescriptions}`;
 
     if (!res.ok) {
       const err = await res.text();
-      console.error(`[Gemini] API error ${res.status}: ${err.slice(0, 200)}`);
+      const errMsg = `Gemini API error ${res.status}: ${err.slice(0, 300)}`;
+      console.error(`[Gemini] ${errMsg}`);
       return posts.map((p) => ({
         ...p,
         ai_score: 0,
-        ai_reasoning: `Gemini API error: ${res.status}`,
+        ai_reasoning: errMsg,
         ai_comment: "",
       }));
     }
 
     const data = await res.json();
-    const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    // Gemini may return multiple parts (thinking models); concatenate only text parts
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    const text: string = parts
+      .filter((p: Record<string, unknown>) => typeof p.text === "string" && !p.thought)
+      .map((p: Record<string, unknown>) => p.text)
+      .join("\n");
     console.log(`[Gemini] Response length: ${text.length} chars for ${posts.length} posts`);
-    console.log(`[Gemini] First 200 chars: ${text.slice(0, 200)}`);
+    console.log(`[Gemini] First 300 chars: ${text.slice(0, 300)}`);
 
     // Parse response for each post
     return posts.map((post, i) => {
@@ -108,7 +114,7 @@ ${postDescriptions}`;
         };
       }
 
-      return { ...post, ai_score: 0, ai_reasoning: "Could not parse AI response for this post", ai_comment: "" };
+      return { ...post, ai_score: 0, ai_reasoning: `Parse failed. Section: ${section.slice(0, 150)}`, ai_comment: "" };
     });
   } catch (err) {
     console.error(`[Gemini] Error: ${err}`);

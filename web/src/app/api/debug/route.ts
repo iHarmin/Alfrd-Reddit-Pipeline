@@ -8,7 +8,7 @@ export async function GET() {
     },
     {
       name: "Arctic Shift API",
-      url: "https://arctic-shift.photon-reddit.com/api/posts?subreddit=Accounting&sort=created_utc&order=desc&limit=5",
+      url: "https://arctic-shift.photon-reddit.com/api/posts/search?subreddit=Accounting&limit=5&sort=desc",
     },
   ];
 

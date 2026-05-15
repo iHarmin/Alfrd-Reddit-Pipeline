@@ -232,8 +232,12 @@ export default function Home() {
       if (data.new_posts > 0) {
         setNewCount((prev) => prev + data.new_posts);
       }
-      // Step 2: Score a batch of unscored posts (separate call)
-      await fetch("/api/scan?mode=score");
+      // Step 2: Score batches of unscored posts (loop until done or 5 rounds)
+      for (let i = 0; i < 5; i++) {
+        const scoreRes = await fetch("/api/scan?mode=score");
+        const scoreData = await scoreRes.json();
+        if (scoreData.remaining === 0) break;
+      }
       await loadPosts();
     } catch (err: unknown) {
       setPollError(`Poll failed: ${err instanceof Error ? err.message : "unknown"}`);

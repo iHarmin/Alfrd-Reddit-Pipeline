@@ -76,51 +76,37 @@ ${postDescriptions}`;
     // Parse response for each post
     return posts.map((post, i) => {
       const postNum = i + 1;
-      // Find section for this post
-      const sectionPattern = new RegExp(
-        `POST ${postNum}:?\\s*\\n` +
-        `RELEVANCE_SCORE:\\s*(\\d+)\\s*\\n` +
-        `REASONING:\\s*(.+?)\\n` +
-        `DRAFT_COMMENT:\\s*([\\s\\S]*?)(?=\\nPOST \\d|$)`,
-        "i"
-      );
-      const match = text.match(sectionPattern);
+      const nextPostNum = i + 2;
 
-      if (match) {
+      // Find the section for this post (between POST N and POST N+1)
+      const startPattern = new RegExp(`POST\\s*${postNum}[:\\s]`, "i");
+      const endPattern = new RegExp(`POST\\s*${nextPostNum}[:\\s]`, "i");
+
+      const startMatch = text.match(startPattern);
+      if (!startMatch || startMatch.index === undefined) {
+        return { ...post, ai_score: 0, ai_reasoning: "Could not parse AI response for this post", ai_comment: "" };
+      }
+
+      const startIdx = startMatch.index;
+      const endMatch = text.slice(startIdx + 5).match(endPattern);
+      const section = endMatch && endMatch.index !== undefined
+        ? text.slice(startIdx, startIdx + 5 + endMatch.index)
+        : text.slice(startIdx);
+
+      const scoreM = section.match(/RELEVANCE_SCORE:\s*(\d+)/i);
+      const reasonM = section.match(/REASONING:\s*(.+)/i);
+      const commentM = section.match(/DRAFT_COMMENT:\s*([\s\S]*?)$/i);
+
+      if (scoreM) {
         return {
           ...post,
-          ai_score: Math.min(10, Math.max(1, parseInt(match[1]))),
-          ai_reasoning: match[2].trim(),
-          ai_comment: match[3].trim(),
+          ai_score: Math.min(10, Math.max(1, parseInt(scoreM[1]))),
+          ai_reasoning: reasonM?.[1]?.trim() || "",
+          ai_comment: commentM?.[1]?.trim() || "",
         };
       }
 
-      // Fallback: try simpler pattern
-      const lines = text.split("\n");
-      const postHeader = lines.findIndex((l: string) =>
-        l.match(new RegExp(`POST\\s*${postNum}`, "i"))
-      );
-      if (postHeader >= 0) {
-        const section = lines.slice(postHeader, postHeader + 10).join("\n");
-        const scoreM = section.match(/RELEVANCE_SCORE:\s*(\d+)/i);
-        const reasonM = section.match(/REASONING:\s*(.+)/i);
-        const commentM = section.match(/DRAFT_COMMENT:\s*([\s\S]*?)$/i);
-        if (scoreM) {
-          return {
-            ...post,
-            ai_score: Math.min(10, Math.max(1, parseInt(scoreM[1]))),
-            ai_reasoning: reasonM?.[1]?.trim() || "",
-            ai_comment: commentM?.[1]?.trim() || "",
-          };
-        }
-      }
-
-      return {
-        ...post,
-        ai_score: 0,
-        ai_reasoning: "Could not parse AI response for this post",
-        ai_comment: "",
-      };
+      return { ...post, ai_score: 0, ai_reasoning: "Could not parse AI response for this post", ai_comment: "" };
     });
   } catch (err) {
     console.error(`[Gemini] Error: ${err}`);

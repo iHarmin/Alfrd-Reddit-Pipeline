@@ -1,34 +1,30 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
+  const arcticUrl = "https://arctic-shift.photon-reddit.com/api/posts/search?subreddit=Accounting&limit=5&sort=desc";
   const tests = [
     {
-      name: "Pullpush API",
-      url: "https://api.pullpush.io/reddit/search/submission/?subreddit=Accounting&sort=created_utc&order=desc&size=5",
-    },
-    {
-      name: "Arctic Shift API",
-      url: "https://arctic-shift.photon-reddit.com/api/posts/search?subreddit=Accounting&limit=5&sort=desc",
+      name: "Arctic Shift (correct URL)",
+      url: arcticUrl,
     },
   ];
 
   const results = [];
   for (const test of tests) {
     try {
-      const res = await fetch(test.url, {
-        headers: { "User-Agent": "ALFRD-Reddit-Monitor/1.0" },
-      });
+      const res = await fetch(test.url, { cache: "no-store" });
       const text = await res.text();
       results.push({
         name: test.name,
+        url: test.url,
         status: res.status,
         contentType: res.headers.get("content-type")?.slice(0, 50),
         bodyPreview: text.slice(0, 300),
       });
-    } catch (err: any) {
-      results.push({ name: test.name, error: err.message });
+    } catch (err: unknown) {
+      results.push({ name: test.name, url: test.url, error: String(err) });
     }
   }
 
-  return NextResponse.json(results);
+  return NextResponse.json({ version: 2, results });
 }

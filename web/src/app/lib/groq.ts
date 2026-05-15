@@ -72,14 +72,22 @@ ${postDescriptions}`;
     }
 
     const data = await res.json();
-    // Gemini may return multiple parts (thinking models); concatenate only text parts
-    const parts = data.candidates?.[0]?.content?.parts || [];
+    // Extract text from all parts — Gemini 2.5 may have thought and text parts
+    const parts: Array<Record<string, unknown>> = data.candidates?.[0]?.content?.parts || [];
     const text: string = parts
-      .filter((p: Record<string, unknown>) => typeof p.text === "string" && !p.thought)
-      .map((p: Record<string, unknown>) => p.text)
-      .join("\n");
+      .map((p) => (typeof p.text === "string" ? p.text : ""))
+      .join("\n")
+      .trim();
+    
+    if (!text) {
+      const rawJson = JSON.stringify(data).slice(0, 500);
+      console.error(`[Gemini] Empty response. Raw: ${rawJson}`);
+      return posts.map((p) => ({
+        ...p, ai_score: 0, ai_reasoning: `Gemini returned empty. Raw: ${rawJson.slice(0, 200)}`, ai_comment: "",
+      }));
+    }
+    
     console.log(`[Gemini] Response length: ${text.length} chars for ${posts.length} posts`);
-    console.log(`[Gemini] First 300 chars: ${text.slice(0, 300)}`);
 
     // Parse response for each post
     return posts.map((post, i) => {

@@ -1,6 +1,6 @@
 import { SYSTEM_PROMPT, type RedditPost, type ScoredPost } from "./config";
 
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent";
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 /**
  * Score a batch of posts in a SINGLE API call using Google Gemini.

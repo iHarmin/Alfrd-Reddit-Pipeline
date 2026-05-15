@@ -40,7 +40,7 @@ function parsePost(p: Record<string, unknown>, fallbackSub: string): RedditPost 
  */
 async function fetchSubreddit(subName: string): Promise<RedditPost[]> {
   const after = hoursAgoISO(72);
-  const url = `${API_BASE}?subreddit=${encodeURIComponent(subName)}&limit=100&sort=desc&after=${after}`;
+  const url = `${API_BASE}?subreddit=${encodeURIComponent(subName)}&limit=25&sort=desc&after=${after}`;
 
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {

@@ -220,20 +220,23 @@ export default function Home() {
     } catch {}
   }, []);
 
-  // Poll: server fetches Reddit via Pullpush API, scores, and stores
+  // Poll: server fetches Reddit via Arctic Shift, stores posts, then scores a batch
   const poll = useCallback(async () => {
     setPolling(true);
     setPollError(null);
     try {
+      // Step 1: Fetch new posts (fast - no AI)
       const res = await fetch("/api/scan");
       const data = await res.json();
       setLastPoll(data.polled_at);
       if (data.new_posts > 0) {
         setNewCount((prev) => prev + data.new_posts);
       }
+      // Step 2: Score a batch of unscored posts (separate call)
+      await fetch("/api/scan?mode=score");
       await loadPosts();
-    } catch (err: any) {
-      setPollError(`Poll failed: ${err.message}`);
+    } catch (err: unknown) {
+      setPollError(`Poll failed: ${err instanceof Error ? err.message : "unknown"}`);
     }
     setPolling(false);
   }, [loadPosts]);

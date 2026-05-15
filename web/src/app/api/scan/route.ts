@@ -41,6 +41,7 @@ export async function GET(request: Request) {
     const allReasons = [...new Set(scored.filter((s) => s.ai_score === 0).map((s) => s.ai_reasoning))];
     return NextResponse.json({
       mode: "score",
+      version: 3,
       scored: successCount,
       remaining: unscored.length - successCount,
       total: existingPosts.length,

@@ -1,7 +1,7 @@
 import { SYSTEM_PROMPT, type RedditPost, type ScoredPost } from "./config";
 
-async function callGroqWithRetry(body: object, apiKey: string, retries = 3): Promise<any> {
-  for (let attempt = 0; attempt < retries; attempt++) {
+async function callGroqWithRetry(body: object, apiKey: string, retries = 1): Promise<any> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -15,15 +15,13 @@ async function callGroqWithRetry(body: object, apiKey: string, retries = 3): Pro
       return await res.json();
     }
 
-    // Rate limited — wait and retry
-    if (res.status === 429) {
-      const waitMs = Math.min(2000 * (attempt + 1), 10000);
-      console.log(`Groq rate limited, waiting ${waitMs}ms (attempt ${attempt + 1}/${retries})`);
-      await new Promise((r) => setTimeout(r, waitMs));
+    // Rate limited — short wait and one retry
+    if (res.status === 429 && attempt < retries) {
+      await new Promise((r) => setTimeout(r, 1500));
       continue;
     }
 
-    // Other error — don't retry
+    // Other error or final retry — don't wait
     throw new Error(`Groq API error: ${res.status}`);
   }
   throw new Error("Groq API rate limit exceeded after retries");

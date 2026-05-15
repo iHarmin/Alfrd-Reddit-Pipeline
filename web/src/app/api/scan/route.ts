@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     const unscored = existingPosts.filter(
       (p) => p.ai_score === 0 && p.ai_reasoning?.startsWith("Pending")
     );
-    const batch = unscored.slice(0, 10);
+    const batch = unscored.slice(0, 2);
     let scored = 0;
     for (const post of batch) {
       try {

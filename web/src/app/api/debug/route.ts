@@ -1,30 +1,19 @@
 import { NextResponse } from "next/server";
+import { loadStoredPosts, saveStoredPosts } from "../../lib/storage";
 
 export async function GET() {
-  const arcticUrl = "https://arctic-shift.photon-reddit.com/api/posts/search?subreddit=Accounting&limit=5&sort=desc";
-  const tests = [
-    {
-      name: "Arctic Shift (correct URL)",
-      url: arcticUrl,
-    },
-  ];
-
-  const results = [];
-  for (const test of tests) {
-    try {
-      const res = await fetch(test.url, { cache: "no-store" });
-      const text = await res.text();
-      results.push({
-        name: test.name,
-        url: test.url,
-        status: res.status,
-        contentType: res.headers.get("content-type")?.slice(0, 50),
-        bodyPreview: text.slice(0, 300),
-      });
-    } catch (err: unknown) {
-      results.push({ name: test.name, url: test.url, error: String(err) });
+  // Reset failed posts back to pending so they can be re-scored
+  const posts = await loadStoredPosts();
+  let reset = 0;
+  for (const p of posts) {
+    if (p.ai_score === 0 && p.ai_reasoning?.startsWith("AI scoring failed")) {
+      p.ai_reasoning = "Pending - will score on next pass";
+      p.ai_comment = "";
+      reset++;
     }
   }
-
-  return NextResponse.json({ version: 2, results });
+  if (reset > 0) await saveStoredPosts(posts);
+  const scored = posts.filter((p) => p.ai_score > 0).length;
+  const pending = posts.filter((p) => p.ai_score === 0).length;
+  return NextResponse.json({ total: posts.length, scored, pending, reset });
 }

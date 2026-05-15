@@ -232,11 +232,12 @@ export default function Home() {
       if (data.new_posts > 0) {
         setNewCount((prev) => prev + data.new_posts);
       }
-      // Step 2: Score batches of unscored posts (loop until done or 5 rounds)
-      for (let i = 0; i < 5; i++) {
+      // Step 2: Score a few posts (with delay to avoid rate limits)
+      for (let i = 0; i < 3; i++) {
         const scoreRes = await fetch("/api/scan?mode=score");
         const scoreData = await scoreRes.json();
-        if (scoreData.remaining === 0) break;
+        if (scoreData.remaining === 0 || scoreData.error) break;
+        await new Promise((r) => setTimeout(r, 2000));
       }
       await loadPosts();
     } catch (err: unknown) {

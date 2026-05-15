@@ -11,28 +11,27 @@ export async function GET(request: Request) {
   const mode = url.searchParams.get("mode") || "fetch"; // "fetch" or "score"
 
   if (mode === "score") {
-    // Score a batch of unscored posts
+    // Score one unscored post at a time
     const existingPosts = await loadStoredPosts();
     const unscored = existingPosts.filter(
-      (p) => p.ai_score === 0 && p.ai_reasoning?.startsWith("Pending")
+      (p) => p.ai_score === 0 && (p.ai_reasoning?.startsWith("Pending") || p.ai_reasoning?.startsWith("AI scoring failed"))
     );
-    const batch = unscored.slice(0, 2);
-    let scored = 0;
-    for (const post of batch) {
-      try {
-        const result = await scorePost(post);
-        post.ai_score = result.ai_score;
-        post.ai_reasoning = result.ai_reasoning;
-        post.ai_comment = result.ai_comment;
-        scored++;
-      } catch { /* leave as-is */ }
+    if (unscored.length === 0) {
+      return NextResponse.json({ mode: "score", scored: 0, remaining: 0, total: existingPosts.length });
     }
-    if (scored > 0) await saveStoredPosts(existingPosts);
+    const post = unscored[0];
+    const result = await scorePost(post);
+    const success = result.ai_score > 0;
+    post.ai_score = result.ai_score;
+    post.ai_reasoning = result.ai_reasoning;
+    post.ai_comment = result.ai_comment;
+    if (success) await saveStoredPosts(existingPosts);
     return NextResponse.json({
       mode: "score",
-      scored,
-      remaining: unscored.length - scored,
+      scored: success ? 1 : 0,
+      remaining: unscored.length - (success ? 1 : 0),
       total: existingPosts.length,
+      error: success ? undefined : result.ai_reasoning,
     });
   }
 

@@ -1,111 +1,142 @@
 import { SYSTEM_PROMPT, type RedditPost, type ScoredPost } from "./config";
 
-async function callGroqWithRetry(body: object, apiKey: string, retries = 1): Promise<any> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent";
 
-    if (res.ok) {
-      return await res.json();
-    }
-
-    // Rate limited — short wait and one retry
-    if (res.status === 429 && attempt < retries) {
-      await new Promise((r) => setTimeout(r, 1500));
-      continue;
-    }
-
-    // Other error or final retry — don't wait
-    throw new Error(`Groq API error: ${res.status}`);
-  }
-  throw new Error("Groq API rate limit exceeded after retries");
-}
-
-export async function scorePost(post: RedditPost): Promise<ScoredPost> {
-  const groqKey = process.env.GROQ_API_KEY;
-  if (!groqKey) {
-    return {
-      ...post,
+/**
+ * Score a batch of posts in a SINGLE API call using Google Gemini.
+ * This avoids per-post rate limits — one call scores up to 15 posts.
+ */
+export async function scorePosts(posts: RedditPost[]): Promise<ScoredPost[]> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return posts.map((p) => ({
+      ...p,
       ai_score: 0,
-      ai_reasoning: "No API key configured",
-      ai_comment: "(Configure GROQ_API_KEY to enable AI drafting)",
-    };
+      ai_reasoning: "No GEMINI_API_KEY configured",
+      ai_comment: "",
+    }));
   }
 
-  const userMessage = `Reddit Post from r/${post.subreddit}:
-
+  // Build a single prompt for all posts
+  const postDescriptions = posts.map((post, i) => {
+    const body = post.selftext?.slice(0, 800) || "(no body text)";
+    return `--- POST ${i + 1} ---
+Subreddit: r/${post.subreddit}
 Title: ${post.title}
+Body: ${body}
+Keywords matched: ${post.matched_keywords.join(", ")}`;
+  }).join("\n\n");
 
-Body: ${post.selftext.slice(0, 1500) || "(no body text)"}
+  const userMessage = `Score these ${posts.length} Reddit posts for relevance to ALFRD. For EACH post, respond in this exact format:
 
-Matched keywords: ${post.matched_keywords.join(", ")}
-
----
-Score this post's relevance to ALFRD (1-10) using the scoring rubric. Use the full range. Then draft a helpful comment.
-
-Respond in this exact format:
+POST 1:
 RELEVANCE_SCORE: [1-10]
-REASONING: [one sentence why this score]
-DRAFT_COMMENT: [your suggested comment]`;
+REASONING: [one sentence]
+DRAFT_COMMENT: [your comment, 3-5 sentences]
+
+POST 2:
+RELEVANCE_SCORE: [1-10]
+REASONING: [one sentence]
+DRAFT_COMMENT: [your comment, 3-5 sentences]
+
+...and so on for all ${posts.length} posts.
+
+Here are the posts:
+
+${postDescriptions}`;
 
   try {
-    const data = await callGroqWithRetry(
-      {
-        model: "llama-3.1-8b-instant",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userMessage },
-        ],
-        temperature: 0.4,
-        max_tokens: 500,
-      },
-      groqKey
-    );
+    const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [{ parts: [{ text: userMessage }] }],
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 4000,
+        },
+      }),
+    });
 
-    const text = data.choices?.[0]?.message?.content?.trim() || "";
+    if (!res.ok) {
+      const err = await res.text();
+      console.error(`[Gemini] API error ${res.status}: ${err.slice(0, 200)}`);
+      return posts.map((p) => ({
+        ...p,
+        ai_score: 0,
+        ai_reasoning: `Gemini API error: ${res.status}`,
+        ai_comment: "",
+      }));
+    }
 
-    let score = 0;
-    let reasoning = "";
-    let comment = "";
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    // More robust parsing
-    const scoreMatch = text.match(/RELEVANCE_SCORE:\s*(\d+)/i);
-    if (scoreMatch) score = Math.min(10, Math.max(1, parseInt(scoreMatch[1])));
+    // Parse response for each post
+    return posts.map((post, i) => {
+      const postNum = i + 1;
+      // Find section for this post
+      const sectionPattern = new RegExp(
+        `POST ${postNum}:?\\s*\\n` +
+        `RELEVANCE_SCORE:\\s*(\\d+)\\s*\\n` +
+        `REASONING:\\s*(.+?)\\n` +
+        `DRAFT_COMMENT:\\s*([\\s\\S]*?)(?=\\nPOST \\d|$)`,
+        "i"
+      );
+      const match = text.match(sectionPattern);
 
-    const reasoningMatch = text.match(/REASONING:\s*(.+?)(?=\nDRAFT_COMMENT:|$)/i);
-    if (reasoningMatch) reasoning = reasoningMatch[1].trim();
+      if (match) {
+        return {
+          ...post,
+          ai_score: Math.min(10, Math.max(1, parseInt(match[1]))),
+          ai_reasoning: match[2].trim(),
+          ai_comment: match[3].trim(),
+        };
+      }
 
-    const commentMatch = text.match(/DRAFT_COMMENT:\s*([\s\S]+)$/i);
-    if (commentMatch) comment = commentMatch[1].trim();
+      // Fallback: try simpler pattern
+      const lines = text.split("\n");
+      const postHeader = lines.findIndex((l: string) =>
+        l.match(new RegExp(`POST\\s*${postNum}`, "i"))
+      );
+      if (postHeader >= 0) {
+        const section = lines.slice(postHeader, postHeader + 10).join("\n");
+        const scoreM = section.match(/RELEVANCE_SCORE:\s*(\d+)/i);
+        const reasonM = section.match(/REASONING:\s*(.+)/i);
+        const commentM = section.match(/DRAFT_COMMENT:\s*([\s\S]*?)$/i);
+        if (scoreM) {
+          return {
+            ...post,
+            ai_score: Math.min(10, Math.max(1, parseInt(scoreM[1]))),
+            ai_reasoning: reasonM?.[1]?.trim() || "",
+            ai_comment: commentM?.[1]?.trim() || "",
+          };
+        }
+      }
 
-    // If parsing completely failed, mark it clearly
-    if (score === 0) {
       return {
         ...post,
         ai_score: 0,
-        ai_reasoning: "AI response could not be parsed",
-        ai_comment: text.slice(0, 500),
+        ai_reasoning: "Could not parse AI response for this post",
+        ai_comment: "",
       };
-    }
-
-    return {
-      ...post,
-      ai_score: score,
-      ai_reasoning: reasoning,
-      ai_comment: comment,
-    };
+    });
   } catch (err) {
-    return {
-      ...post,
+    console.error(`[Gemini] Error: ${err}`);
+    return posts.map((p) => ({
+      ...p,
       ai_score: 0,
-      ai_reasoning: `AI scoring failed: ${err instanceof Error ? err.message : "unknown error"}`,
-      ai_comment: "(Review this post manually)",
-    };
+      ai_reasoning: `AI scoring error: ${err instanceof Error ? err.message : "unknown"}`,
+      ai_comment: "",
+    }));
   }
+}
+
+/**
+ * Score a single post (backwards compatible).
+ */
+export async function scorePost(post: RedditPost): Promise<ScoredPost> {
+  const results = await scorePosts([post]);
+  return results[0];
 }

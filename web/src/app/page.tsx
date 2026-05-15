@@ -220,25 +220,21 @@ export default function Home() {
     } catch {}
   }, []);
 
-  // Poll: server fetches Reddit via Arctic Shift, stores posts, then scores a batch
+  // Poll: fetch + score in one call, then score remaining if any
   const poll = useCallback(async () => {
     setPolling(true);
     setPollError(null);
     try {
-      // Step 1: Fetch new posts (fast - no AI)
+      // Full scan: fetches Reddit + scores new posts in one call
       const res = await fetch("/api/scan");
       const data = await res.json();
       setLastPoll(data.polled_at);
       if (data.new_posts > 0) {
         setNewCount((prev) => prev + data.new_posts);
       }
-      // Step 2: Score a few posts (with delay to avoid rate limits)
-      for (let i = 0; i < 3; i++) {
-        const scoreRes = await fetch("/api/scan?mode=score");
-        const scoreData = await scoreRes.json();
-        if (scoreData.remaining === 0 || scoreData.error) break;
-        await new Promise((r) => setTimeout(r, 2000));
-      }
+      // Score remaining unscored posts if any
+      const scoreRes = await fetch("/api/scan?mode=score");
+      await scoreRes.json();
       await loadPosts();
     } catch (err: unknown) {
       setPollError(`Poll failed: ${err instanceof Error ? err.message : "unknown"}`);

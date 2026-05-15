@@ -37,11 +37,13 @@ export async function GET(request: Request) {
     }
     await saveStoredPosts(existingPosts);
     const successCount = scored.filter((s) => s.ai_score > 0).length;
+    const firstFailed = scored.find((s) => s.ai_score === 0);
     return NextResponse.json({
       mode: "score",
       scored: successCount,
       remaining: unscored.length - successCount,
       total: existingPosts.length,
+      debug: firstFailed ? firstFailed.ai_reasoning : undefined,
     });
   }
 

@@ -108,3 +108,10 @@ export interface ScoredPost extends RedditPost {
   ai_reasoning: string;
   ai_comment: string;
 }
+
+export interface StoredPost extends ScoredPost {
+  status: "remaining" | "reviewed" | "replied" | "skipped";
+  reviewed_by?: string;
+  reviewed_at?: string;
+  first_seen: string;
+}

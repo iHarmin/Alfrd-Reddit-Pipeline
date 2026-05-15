@@ -5,3 +5,4 @@ stored_posts.json
 poll_anchors.json
 emailed_posts.json
 tsconfig.tsbuildinfo
+.vercel

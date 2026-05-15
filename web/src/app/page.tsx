@@ -202,6 +202,7 @@ export default function Home() {
   const [lastPoll, setLastPoll] = useState<string | null>(null);
   const [newCount, setNewCount] = useState(0);
   const [polling, setPolling] = useState(false);
+  const [pollError, setPollError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [minScore, setMinScore] = useState(6);
   const [currentPage, setCurrentPage] = useState(1);
@@ -219,24 +220,27 @@ export default function Home() {
     } catch {}
   }, []);
 
-  // Poll for new posts (fast incremental check)
-  const poll = useCallback(async (full = false) => {
+  // Poll: server fetches Reddit via Pullpush API, scores, and stores
+  const poll = useCallback(async () => {
     setPolling(true);
+    setPollError(null);
     try {
-      const res = await fetch(`/api/scan${full ? "?full=true" : ""}`);
+      const res = await fetch("/api/scan");
       const data = await res.json();
       setLastPoll(data.polled_at);
       if (data.new_posts > 0) {
         setNewCount((prev) => prev + data.new_posts);
       }
       await loadPosts();
-    } catch {}
+    } catch (err: any) {
+      setPollError(`Poll failed: ${err.message}`);
+    }
     setPolling(false);
   }, [loadPosts]);
 
   // On mount: load posts instantly, then do initial poll
   useEffect(() => {
-    loadPosts().then(() => poll(true));
+    loadPosts().then(() => poll());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -360,6 +364,13 @@ export default function Home() {
         {lastPoll && (
           <div className="text-sm text-gray-500">
             Last poll: {new Date(lastPoll).toLocaleTimeString()} · Polls every 30 min · {filteredPosts.length} of {scoredPosts.length} posts shown
+          </div>
+        )}
+
+        {/* Error display */}
+        {pollError && (
+          <div className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-2 text-sm text-red-400">
+            {pollError}
           </div>
         )}
 

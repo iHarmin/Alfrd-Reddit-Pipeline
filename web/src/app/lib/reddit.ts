@@ -1,109 +1,81 @@
 import { KEYWORDS, PRIMARY_SUBREDDITS, SECONDARY_SUBREDDITS, type RedditPost } from "./config";
-import fs from "fs";
-import path from "path";
 
-const HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-};
-
-// Track newest post per subreddit for incremental polling
-const ANCHORS_FILE = path.join(process.cwd(), "poll_anchors.json");
-
-interface PollAnchors {
-  [subreddit: string]: string; // subreddit -> newest post fullname (t3_id)
-}
-
-function loadAnchors(): PollAnchors {
-  try {
-    if (fs.existsSync(ANCHORS_FILE)) {
-      return JSON.parse(fs.readFileSync(ANCHORS_FILE, "utf-8"));
-    }
-  } catch {}
-  return {};
-}
-
-function saveAnchors(anchors: PollAnchors): void {
-  fs.writeFileSync(ANCHORS_FILE, JSON.stringify(anchors, null, 2));
-}
+const API_BASE = "https://arctic-shift.photon-reddit.com/api/posts/search";
 
 function isRelevant(title: string, selftext: string): string[] {
   const combined = (title + " " + selftext).toLowerCase();
   return KEYWORDS.filter((kw) => combined.includes(kw.toLowerCase()));
 }
 
-/**
- * Fetch only NEW posts from a subreddit since the last poll.
- * Uses `before` parameter to only get posts newer than our anchor.
- * Fast: typically returns 0-5 posts per sub.
- */
-async function fetchNewPosts(subName: string, anchor: string | undefined): Promise<{ posts: RedditPost[]; newestFullname: string | null }> {
-  const url = `https://www.reddit.com/r/${subName}/new.json?limit=100&raw_json=1${anchor ? `&before=${anchor}` : ""}`;
+/** ISO date string for N hours ago */
+function hoursAgoISO(hours: number): string {
+  return new Date(Date.now() - hours * 3600_000).toISOString().split("T")[0];
+}
 
-  const res = await fetch(url, { headers: HEADERS, next: { revalidate: 0 } });
-  if (!res.ok) return { posts: [], newestFullname: null };
+function parsePost(p: Record<string, unknown>, fallbackSub: string): RedditPost | null {
+  const selftext = p.selftext === "[removed]" ? "" : (p.selftext as string || "");
+  const title = (p.title as string) || "";
+  const matched = isRelevant(title, selftext);
+  if (matched.length === 0) return null;
+
+  return {
+    id: p.id as string,
+    subreddit: (p.subreddit as string) || fallbackSub,
+    title,
+    selftext,
+    url: p.permalink
+      ? `https://www.reddit.com${p.permalink}`
+      : `https://www.reddit.com/r/${fallbackSub}/comments/${p.id}`,
+    author: (p.author as string) || "[deleted]",
+    score: (p.score as number) || 0,
+    num_comments: (p.num_comments as number) || 0,
+    created_utc: (p.created_utc as number) || 0,
+    matched_keywords: matched,
+  };
+}
+
+/**
+ * Fetch all recent posts from a subreddit using Arctic Shift API,
+ * then filter locally by keywords.
+ */
+async function fetchSubreddit(subName: string): Promise<RedditPost[]> {
+  const after = hoursAgoISO(72);
+  const url = `${API_BASE}?subreddit=${encodeURIComponent(subName)}&limit=100&sort=desc&after=${after}`;
+
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) {
+    console.error(`[ArcticShift] r/${subName}: ${res.status}`);
+    return [];
+  }
 
   const data = await res.json();
-  const children = data?.data?.children ?? [];
-  if (children.length === 0) return { posts: [], newestFullname: null };
-
-  const now = Date.now() / 1000;
-  const maxAge = 72 * 3600;
+  const items: Record<string, unknown>[] = data?.data ?? [];
   const posts: RedditPost[] = [];
-  let newestFullname: string | null = null;
 
-  for (const child of children) {
-    const p = child.data;
-    // Track the newest post
-    if (!newestFullname) newestFullname = child.kind + "_" + p.id;
-
-    if (now - p.created_utc > maxAge) continue;
-
-    const selftext = p.selftext || "";
-    const matched = isRelevant(p.title, selftext);
-    if (matched.length === 0) continue;
-
-    posts.push({
-      id: p.id,
-      subreddit: p.subreddit || subName,
-      title: p.title,
-      selftext,
-      url: `https://www.reddit.com${p.permalink}`,
-      author: p.author || "[deleted]",
-      score: p.score || 0,
-      num_comments: p.num_comments || 0,
-      created_utc: p.created_utc,
-      matched_keywords: matched,
-    });
+  for (const p of items) {
+    const post = parsePost(p, subName);
+    if (post) posts.push(post);
   }
 
-  return { posts, newestFullname };
+  return posts;
 }
 
 /**
- * Incremental poll: fetch only NEW posts across all subreddits.
- * Uses anchors to avoid re-fetching seen posts. Very fast.
+ * Fetch from all tracked subreddits using Arctic Shift API.
  */
-export async function pollNewPosts(): Promise<RedditPost[]> {
+export async function scanSubreddits(): Promise<RedditPost[]> {
   const subs = [...PRIMARY_SUBREDDITS, ...SECONDARY_SUBREDDITS];
-  const anchors = loadAnchors();
 
   const results = await Promise.allSettled(
-    subs.map((sub) => fetchNewPosts(sub, anchors[sub]))
+    subs.map((sub) => fetchSubreddit(sub))
   );
 
   const allPosts: RedditPost[] = [];
   const seenIds = new Set<string>();
-  const newAnchors = { ...anchors };
 
-  for (let i = 0; i < results.length; i++) {
-    const result = results[i];
+  for (const result of results) {
     if (result.status === "fulfilled") {
-      const { posts, newestFullname } = result.value;
-      if (newestFullname) {
-        newAnchors[subs[i]] = newestFullname;
-      }
-      for (const post of posts) {
+      for (const post of result.value) {
         if (!seenIds.has(post.id)) {
           seenIds.add(post.id);
           allPosts.push(post);
@@ -112,41 +84,6 @@ export async function pollNewPosts(): Promise<RedditPost[]> {
     }
   }
 
-  saveAnchors(newAnchors);
-  return allPosts;
-}
-
-/**
- * Full scan: fetch latest posts without anchors (for initial load).
- * Still fast - only 25 posts per sub.
- */
-export async function fullScan(): Promise<RedditPost[]> {
-  const subs = [...PRIMARY_SUBREDDITS, ...SECONDARY_SUBREDDITS];
-  const anchors: PollAnchors = {};
-
-  const results = await Promise.allSettled(
-    subs.map((sub) => fetchNewPosts(sub, undefined))
-  );
-
-  const allPosts: RedditPost[] = [];
-  const seenIds = new Set<string>();
-
-  for (let i = 0; i < results.length; i++) {
-    const result = results[i];
-    if (result.status === "fulfilled") {
-      const { posts, newestFullname } = result.value;
-      if (newestFullname) {
-        anchors[subs[i]] = newestFullname;
-      }
-      for (const post of posts) {
-        if (!seenIds.has(post.id)) {
-          seenIds.add(post.id);
-          allPosts.push(post);
-        }
-      }
-    }
-  }
-
-  saveAnchors(anchors);
+  console.log(`[ArcticShift] Found ${allPosts.length} matching posts across ${subs.length} subreddits`);
   return allPosts;
 }

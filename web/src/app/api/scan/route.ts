@@ -1,38 +1,15 @@
 import { NextResponse } from "next/server";
-import { pollNewPosts, fullScan } from "../../lib/reddit";
+import { scanSubreddits } from "../../lib/reddit";
 import { scorePost } from "../../lib/groq";
-import type { ScoredPost, RedditPost } from "../../lib/config";
-import type { StoredPost } from "../posts/route";
-import fs from "fs";
-import path from "path";
+import type { StoredPost } from "../../lib/config";
+import { loadStoredPosts, saveStoredPosts } from "../../lib/storage";
 
 export const maxDuration = 60;
 
-const POSTS_FILE = path.join(process.cwd(), "stored_posts.json");
+export async function GET() {
+  const newPosts = await scanSubreddits();
 
-function loadStoredPosts(): StoredPost[] {
-  try {
-    if (fs.existsSync(POSTS_FILE)) {
-      return JSON.parse(fs.readFileSync(POSTS_FILE, "utf-8"));
-    }
-  } catch {
-    console.error("Failed to load stored posts");
-  }
-  return [];
-}
-
-function saveStoredPosts(posts: StoredPost[]): void {
-  fs.writeFileSync(POSTS_FILE, JSON.stringify(posts, null, 2));
-}
-
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const full = searchParams.get("full") === "true";
-
-  // Incremental poll (fast) or full scan (initial)
-  const newPosts = full ? await fullScan() : await pollNewPosts();
-
-  const existingPosts = loadStoredPosts();
+  const existingPosts = await loadStoredPosts();
   const existingIds = new Set(existingPosts.map((p) => p.id));
 
   // Only score posts we haven't seen before
@@ -46,9 +23,9 @@ export async function GET(request: Request) {
     });
   }
 
-  console.log(`[Poll] ${newPosts.length} fetched, ${toScore.length} new to score`);
+  console.log(`[Scan] ${newPosts.length} fetched, ${toScore.length} new to score`);
 
-  // Score posts immediately (typically only 1-5 posts)
+  // Score new posts with AI
   const scoredPosts: StoredPost[] = [];
   const now = new Date().toISOString();
 
@@ -75,7 +52,7 @@ export async function GET(request: Request) {
   // Merge and save (newest first)
   const allPosts = [...existingPosts, ...scoredPosts];
   allPosts.sort((a, b) => b.created_utc - a.created_utc);
-  saveStoredPosts(allPosts);
+  await saveStoredPosts(allPosts);
 
   return NextResponse.json({
     new_posts: scoredPosts.length,

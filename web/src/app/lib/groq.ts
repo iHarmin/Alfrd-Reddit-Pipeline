@@ -54,7 +54,7 @@ ${postDescriptions}`;
         contents: [{ parts: [{ text: userMessage }] }],
         generationConfig: {
           temperature: 0.4,
-          maxOutputTokens: 4000,
+          maxOutputTokens: 8000,
         },
       }),
     });
@@ -71,7 +71,9 @@ ${postDescriptions}`;
     }
 
     const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    console.log(`[Gemini] Response length: ${text.length} chars for ${posts.length} posts`);
+    console.log(`[Gemini] First 200 chars: ${text.slice(0, 200)}`);
 
     // Parse response for each post
     return posts.map((post, i) => {

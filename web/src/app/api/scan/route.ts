@@ -7,7 +7,7 @@ import { loadStoredPosts, saveStoredPosts } from "../../lib/storage";
 export const maxDuration = 60;
 
 // Batch size for Gemini scoring (15 posts per API call)
-const SCORE_BATCH_SIZE = 15;
+const SCORE_BATCH_SIZE = 10;
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

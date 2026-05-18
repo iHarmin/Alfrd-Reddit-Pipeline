@@ -50,9 +50,19 @@ export async function GET(request: Request) {
   const existingIds = new Set(existingPosts.map((p) => p.id));
   const toAdd = newPosts.filter((p) => !existingIds.has(p.id));
 
+  // Update upvotes and comment counts for existing posts
+  for (const fresh of newPosts) {
+    const idx = existingPosts.findIndex((p) => p.id === fresh.id);
+    if (idx >= 0) {
+      existingPosts[idx].score = fresh.score;
+      existingPosts[idx].num_comments = fresh.num_comments;
+    }
+  }
+
   if (mode === "fetch") {
     // Just fetch, no scoring
     if (toAdd.length === 0) {
+      await saveStoredPosts(existingPosts); // save updated upvotes/comments
       return NextResponse.json({ new_posts: 0, total: existingPosts.length, polled_at: new Date().toISOString() });
     }
     const now = new Date().toISOString();
@@ -79,8 +89,10 @@ export async function GET(request: Request) {
       ...p, ai_score: 0, ai_reasoning: "Pending", ai_comment: "", status: "remaining" as const, first_seen: now,
     }));
     allPosts = [...existingPosts, ...stored, ...unscoredNew].sort((a, b) => b.created_utc - a.created_utc);
-    await saveStoredPosts(allPosts);
   }
+
+  // Always save (updates upvotes/comments even if no new posts)
+  await saveStoredPosts(allPosts);
 
   const scoredCount = allPosts.filter((p) => p.ai_score > 0).length;
   return NextResponse.json({

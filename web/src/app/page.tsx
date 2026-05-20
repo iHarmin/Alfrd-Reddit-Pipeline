@@ -166,12 +166,6 @@ function PostCard({ post, onStatusChange }: { post: ScoredPost; onStatusChange: 
           >
             Open on Reddit
           </a>
-          <span className="text-gray-600">
-            {post.num_comments} comments
-          </span>
-          <span className="text-gray-600">
-            {post.score} upvotes
-          </span>
         </div>
         <div className="flex items-center gap-2">
           {(["reviewed", "replied", "skipped", "remaining"] as const).map((s) => (

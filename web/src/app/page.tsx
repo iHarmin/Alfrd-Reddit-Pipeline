@@ -72,20 +72,20 @@ function PostCard({ post, onStatusChange }: { post: ScoredPost; onStatusChange: 
   };
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 space-y-4">
+    <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 sm:p-5 space-y-3 sm:space-y-4">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-blue-400 text-sm font-medium">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1.5">
+            <span className="text-blue-400 text-xs sm:text-sm font-medium">
               r/{post.subreddit}
             </span>
-            <span className="text-gray-600 text-sm">·</span>
-            <span className="text-gray-500 text-sm">
+            <span className="text-gray-600 text-xs sm:text-sm">·</span>
+            <span className="text-gray-500 text-xs sm:text-sm">
               u/{post.author}
             </span>
-            <span className="text-gray-600 text-sm">·</span>
-            <span className="text-gray-500 text-sm">
+            <span className="text-gray-600 text-xs sm:text-sm">·</span>
+            <span className="text-gray-500 text-xs sm:text-sm">
               {timeAgo(post.created_utc)}
             </span>
             <StatusBadge status={post.status} />
@@ -94,7 +94,7 @@ function PostCard({ post, onStatusChange }: { post: ScoredPost; onStatusChange: 
             href={post.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-lg font-semibold text-gray-100 hover:text-blue-400 transition-colors"
+            className="text-base sm:text-lg font-semibold text-gray-100 hover:text-blue-400 transition-colors"
           >
             {post.title}
           </a>
@@ -137,26 +137,26 @@ function PostCard({ post, onStatusChange }: { post: ScoredPost; onStatusChange: 
 
       {/* Draft comment */}
       {post.ai_comment && (
-        <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 space-y-3">
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 sm:p-4 space-y-2 sm:space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-300">
+            <span className="text-xs sm:text-sm font-medium text-gray-300">
               Suggested Comment
             </span>
             <button
               onClick={copyComment}
-              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded transition-colors"
+              className="px-2.5 sm:px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm rounded transition-colors"
             >
               {copied ? "Copied!" : "Copy"}
             </button>
           </div>
-          <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
+          <p className="text-gray-300 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">
             {post.ai_comment}
           </p>
         </div>
       )}
 
       {/* Actions */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
         <div className="flex items-center gap-4 text-sm">
           <a
             href={post.url}
@@ -167,12 +167,12 @@ function PostCard({ post, onStatusChange }: { post: ScoredPost; onStatusChange: 
             Open on Reddit
           </a>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           {(["reviewed", "replied", "skipped", "remaining"] as const).map((s) => (
             <button
               key={s}
               onClick={() => onStatusChange(post.id, s)}
-              className={`px-2.5 py-1 text-xs rounded font-medium transition-colors capitalize ${
+              className={`px-2 sm:px-2.5 py-1 text-xs rounded font-medium transition-colors capitalize ${
                 post.status === s
                   ? "bg-white/10 text-white ring-1 ring-white/20"
                   : "bg-gray-800 text-gray-500 hover:text-gray-300 hover:bg-gray-700"
@@ -298,46 +298,46 @@ export default function Home() {
   };
 
   return (
-    <main className="max-w-4xl mx-auto px-4 py-8">
+    <main className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-1">
-          <h1 className="text-3xl font-bold text-white">
+      <div className="mb-5 sm:mb-8">
+        <div className="flex items-center gap-2 sm:gap-3 mb-1">
+          <h1 className="text-xl sm:text-3xl font-bold text-white">
             ALFRD Reddit Monitor
           </h1>
-          <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+          <span className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-xs font-medium ${
             isLive ? "bg-green-900/50 text-green-400 border border-green-800" : "bg-gray-800 text-gray-500 border border-gray-700"
           }`}>
             <span className={`w-2 h-2 rounded-full ${isLive ? "bg-green-400 animate-pulse" : "bg-gray-600"}`} />
             {isLive ? "Live" : "Paused"}
           </span>
         </div>
-        <p className="text-gray-500">
+        <p className="text-gray-500 text-sm sm:text-base">
           Real-time monitoring across {posts.length > 0 ? `${posts.length} posts tracked` : "all subreddits"}
         </p>
       </div>
 
       {/* Controls */}
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-6 space-y-4">
-        <div className="flex flex-wrap items-center gap-4">
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6 space-y-3 sm:space-y-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
           <button
             onClick={() => poll()}
             disabled={polling}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium rounded-lg transition-colors"
+            className="px-4 sm:px-5 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-medium rounded-lg transition-colors text-sm sm:text-base"
           >
             {polling ? "Refreshing..." : "Refresh Now"}
           </button>
 
           <button
             onClick={() => setIsLive(!isLive)}
-            className={`px-4 py-2.5 font-medium rounded-lg transition-colors text-sm ${
+            className={`px-3 sm:px-4 py-2 sm:py-2.5 font-medium rounded-lg transition-colors text-xs sm:text-sm ${
               isLive ? "bg-gray-800 text-gray-400 hover:bg-gray-700" : "bg-green-700 text-white hover:bg-green-600"
             }`}
           >
             {isLive ? "Pause Monitoring" : "Resume Monitoring"}
           </button>
 
-          <div className="flex items-center gap-2 text-sm text-gray-400">
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-400">
             <span>Min score:</span>
             <select
               value={minScore}
@@ -360,7 +360,7 @@ export default function Home() {
         </div>
 
         {lastPoll && (
-          <div className="text-sm text-gray-500">
+          <div className="text-xs sm:text-sm text-gray-500">
             Last poll: {new Date(lastPoll).toLocaleTimeString()} · Polls every 3 hrs · {filteredPosts.length} of {scoredPosts.length} posts shown
           </div>
         )}
@@ -373,12 +373,12 @@ export default function Home() {
         )}
 
         {/* Status filter tabs */}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5 sm:gap-2">
           {(["all", "remaining", "reviewed", "replied", "skipped"] as const).map((s) => (
             <button
               key={s}
               onClick={() => { setStatusFilter(s); setCurrentPage(1); }}
-              className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors capitalize ${
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-lg font-medium transition-colors capitalize ${
                 statusFilter === s
                   ? "bg-blue-600 text-white"
                   : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-300"
@@ -436,9 +436,9 @@ export default function Home() {
 
       {/* Empty state */}
       {paginatedPosts.length === 0 && (
-        <div className="text-center py-20 text-gray-500">
-          <p className="text-lg mb-2">No posts found matching your criteria</p>
-          <p className="text-sm">
+        <div className="text-center py-12 sm:py-20 text-gray-500">
+          <p className="text-base sm:text-lg mb-2">No posts found matching your criteria</p>
+          <p className="text-xs sm:text-sm">
             {isLive ? "Monitoring is active — new posts will appear automatically" : "Monitoring is paused — resume to get new posts"}
           </p>
         </div>

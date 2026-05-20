@@ -13,7 +13,13 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const mode = url.searchParams.get("mode") || "full"; // "full", "fetch", or "score"
 
-  const existingPosts = await loadStoredPosts();
+  // Purge posts older than 72 hours
+  const cutoff = Math.floor(Date.now() / 1000) - 72 * 60 * 60;
+  const allStored = await loadStoredPosts();
+  const existingPosts = allStored.filter((p) => p.created_utc >= cutoff);
+  if (existingPosts.length < allStored.length) {
+    await saveStoredPosts(existingPosts);
+  }
 
   if (mode === "score") {
     // Score unscored posts only

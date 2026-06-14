@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 
 interface ScoredPost {
   id: string;
@@ -61,7 +62,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function PostCard({ post, onStatusChange }: { post: ScoredPost; onStatusChange: (id: string, status: ScoredPost["status"]) => void }) {
+function PostCard({ post, onStatusChange, updating }: { post: ScoredPost; onStatusChange: (id: string, status: ScoredPost["status"]) => void; updating?: boolean }) {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
@@ -135,6 +136,12 @@ function PostCard({ post, onStatusChange }: { post: ScoredPost; onStatusChange: 
         {post.ai_reasoning}
       </div>
 
+      {post.reviewed_by && (
+        <div className="text-xs text-gray-400">
+          Last updated by <span className="text-gray-100">{post.reviewed_by}</span>
+        </div>
+      )}
+
       {/* Draft comment */}
       {post.ai_comment && (
         <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 sm:p-4 space-y-2 sm:space-y-3">
@@ -172,11 +179,12 @@ function PostCard({ post, onStatusChange }: { post: ScoredPost; onStatusChange: 
             <button
               key={s}
               onClick={() => onStatusChange(post.id, s)}
+              disabled={updating}
               className={`px-2 sm:px-2.5 py-1 text-xs rounded font-medium transition-colors capitalize ${
                 post.status === s
                   ? "bg-white/10 text-white ring-1 ring-white/20"
                   : "bg-gray-800 text-gray-500 hover:text-gray-300 hover:bg-gray-700"
-              }`}
+              } ${updating ? "opacity-60 cursor-not-allowed" : ""}`}
             >
               {s}
             </button>
@@ -200,19 +208,29 @@ export default function Home() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [minScore, setMinScore] = useState(6);
   const [currentPage, setCurrentPage] = useState(1);
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [updatingPostId, setUpdatingPostId] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const router = useRouter();
 
   // Load stored posts from backend (instant - just reads a file)
   const loadPosts = useCallback(async () => {
     try {
-      const res = await fetch("/api/posts");
+      const res = await fetch("/api/posts", { credentials: "include" });
+      if (!res.ok) {
+        throw new Error("Unauthorized");
+      }
       const data = await res.json();
       if (data.posts) {
         setPosts(data.posts);
       }
-    } catch {}
-  }, []);
+    } catch {
+      router.replace("/login");
+    }
+  }, [router]);
 
   // Poll: fetch + score in one call, then score remaining if any
   const poll = useCallback(async () => {
@@ -220,58 +238,123 @@ export default function Home() {
     setPollError(null);
     try {
       // Full scan: fetches Reddit + scores new posts in one call
-      const res = await fetch("/api/scan");
+      const res = await fetch("/api/scan", { credentials: "include" });
+      if (!res.ok) {
+        throw new Error("Unauthorized");
+      }
       const data = await res.json();
       setLastPoll(data.polled_at);
       if (data.new_posts > 0) {
         setNewCount((prev) => prev + data.new_posts);
       }
       // Score remaining unscored posts if any
-      const scoreRes = await fetch("/api/scan?mode=score");
+      const scoreRes = await fetch("/api/scan?mode=score", { credentials: "include" });
       await scoreRes.json();
       await loadPosts();
     } catch (err: unknown) {
-      setPollError(`Poll failed: ${err instanceof Error ? err.message : "unknown"}`);
+      if (err instanceof Error && err.message === "Unauthorized") {
+        router.replace("/login");
+      } else {
+        setPollError(`Poll failed: ${err instanceof Error ? err.message : "unknown"}`);
+      }
     }
     setPolling(false);
-  }, [loadPosts]);
+  }, [loadPosts, router]);
 
-  // On mount: load posts instantly, then do initial poll
   useEffect(() => {
+    const loadAuth = async () => {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (!res.ok) {
+          router.replace("/login");
+          return;
+        }
+        const data = await res.json();
+        setUser(data.user);
+      } catch {
+        router.replace("/login");
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+
+    loadAuth();
+  }, [router]);
+
+  // On mount: load posts after auth is confirmed, then do initial poll
+  useEffect(() => {
+    if (!user) return;
     loadPosts().then(() => poll());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
 
   // Auto-refresh posts from storage every 5 seconds
   useEffect(() => {
+    if (!user) return;
     refreshTimerRef.current = setInterval(loadPosts, REFRESH_INTERVAL);
     return () => { if (refreshTimerRef.current) clearInterval(refreshTimerRef.current); };
-  }, [loadPosts]);
+  }, [loadPosts, user]);
 
   // Auto-poll Reddit every 2 minutes
   useEffect(() => {
+    if (!user) return;
     if (!isLive) {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
       return;
     }
     pollTimerRef.current = setInterval(() => poll(), POLL_INTERVAL * 1000);
     return () => { if (pollTimerRef.current) clearInterval(pollTimerRef.current); };
-  }, [isLive, poll]);
+  }, [isLive, poll, user]);
+
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    router.replace("/login");
+  };
 
   const updateStatus = async (id: string, status: ScoredPost["status"]) => {
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === id ? { ...p, status, reviewed_at: new Date().toISOString() } : p
-      )
-    );
+    if (!user) return;
+    setStatusError(null);
+    const original = posts.find((p) => p.id === id);
+    if (!original) return;
+
+    const optimisticPost = {
+      ...original,
+      status,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: user.name,
+    };
+
+    setPosts((prev) => prev.map((p) => (p.id === id ? optimisticPost : p)));
+    setCurrentPage(1);
+    setUpdatingPostId(id);
+
     try {
-      await fetch("/api/posts", {
+      const res = await fetch("/api/posts", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ id, status }),
       });
-    } catch {
-      loadPosts();
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Unable to update status");
+      }
+
+      const data = await res.json();
+      if (data.post) {
+        setPosts((prev) => prev.map((p) => (p.id === id ? data.post : p)));
+      }
+      await loadPosts();
+      setCurrentPage(1);
+    } catch (err: unknown) {
+      setStatusError(err instanceof Error ? err.message : "Unable to update status");
+      if (original) {
+        setPosts((prev) => prev.map((p) => (p.id === id ? original : p)));
+      }
+      await loadPosts();
+    } finally {
+      setUpdatingPostId(null);
     }
   };
 
@@ -297,20 +380,48 @@ export default function Home() {
     skipped: scoredPosts.filter((p) => p.status === "skipped").length,
   };
 
+  if (authLoading) {
+    return (
+      <main className="max-w-4xl mx-auto px-3 sm:px-4 py-8 text-center text-gray-300">
+        Loading user session...
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="max-w-4xl mx-auto px-3 sm:px-4 py-8 text-center text-gray-300">
+        Redirecting to login...
+      </main>
+    );
+  }
+
   return (
     <main className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
       {/* Header */}
       <div className="mb-5 sm:mb-8">
-        <div className="flex items-center gap-2 sm:gap-3 mb-1">
-          <h1 className="text-xl sm:text-3xl font-bold text-white">
-            ALFRD Reddit Monitor
-          </h1>
-          <span className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-xs font-medium ${
-            isLive ? "bg-green-900/50 text-green-400 border border-green-800" : "bg-gray-800 text-gray-500 border border-gray-700"
-          }`}>
-            <span className={`w-2 h-2 rounded-full ${isLive ? "bg-green-400 animate-pulse" : "bg-gray-600"}`} />
-            {isLive ? "Live" : "Paused"}
-          </span>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <h1 className="text-xl sm:text-3xl font-bold text-white">
+              ALFRD Reddit Monitor
+            </h1>
+            <span className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-xs font-medium ${
+              isLive ? "bg-green-900/50 text-green-400 border border-green-800" : "bg-gray-800 text-gray-500 border border-gray-700"
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${isLive ? "bg-green-400 animate-pulse" : "bg-gray-600"}`} />
+              {isLive ? "Live" : "Paused"}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
+            <span>Signed in as <span className="text-white">{user.name}</span></span>
+            <button
+              onClick={logout}
+              className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors"
+            >
+              Logout
+            </button>
+          </div>
         </div>
         <p className="text-gray-500 text-sm sm:text-base">
           Real-time monitoring across {posts.length > 0 ? `${posts.length} posts tracked` : "all subreddits"}
@@ -371,6 +482,11 @@ export default function Home() {
             {pollError}
           </div>
         )}
+        {statusError && (
+          <div className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-2 text-sm text-red-400">
+            {statusError}
+          </div>
+        )}
 
         {/* Status filter tabs */}
         <div className="flex flex-wrap gap-1.5 sm:gap-2">
@@ -395,7 +511,7 @@ export default function Home() {
         <>
           <div className="space-y-4">
             {paginatedPosts.map((post) => (
-              <PostCard key={post.id} post={post} onStatusChange={updateStatus} />
+              <PostCard key={post.id} post={post} onStatusChange={updateStatus} updating={updatingPostId === post.id} />
             ))}
           </div>
 

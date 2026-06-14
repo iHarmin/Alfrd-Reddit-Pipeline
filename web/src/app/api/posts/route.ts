@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
 import { loadStoredPosts, saveStoredPosts } from "../../lib/storage";
+import { requireAuth } from "../../lib/auth";
 import type { StoredPost } from "../../lib/config";
 
 export type { StoredPost };
 
 // GET - return all stored posts
-export async function GET() {
+export async function GET(request: Request) {
+  await requireAuth(request);
   const posts = await loadStoredPosts();
   return NextResponse.json({ posts });
 }
 
 // PATCH - update a post's status
 export async function PATCH(request: Request) {
-  const { id, status, reviewed_by } = await request.json();
+  const user = await requireAuth(request);
+  const { id, status } = await request.json();
 
   if (!id || !status) {
     return NextResponse.json({ error: "id and status required" }, { status: 400 });
@@ -30,7 +33,7 @@ export async function PATCH(request: Request) {
   }
 
   post.status = status;
-  post.reviewed_by = reviewed_by || undefined;
+  post.reviewed_by = user.name;
   post.reviewed_at = new Date().toISOString();
 
   await saveStoredPosts(posts);

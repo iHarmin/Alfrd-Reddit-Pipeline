@@ -51,6 +51,37 @@ export async function saveStoredPosts(posts: StoredPost[]): Promise<void> {
   await setJSON("alfrd:posts", "stored_posts.json", posts);
 }
 
+// --- Users & Sessions ---
+export interface UserRecord {
+  id: string;
+  name: string;
+  email: string;
+  passwordHash: string;
+  created_at: string;
+}
+
+export interface SessionRecord {
+  token: string;
+  userId: string;
+  created_at: string;
+}
+
+export async function loadUsers(): Promise<UserRecord[]> {
+  return (await getJSON<UserRecord[]>("alfrd:users", "users.json")) ?? [];
+}
+
+export async function saveUsers(users: UserRecord[]): Promise<void> {
+  await setJSON("alfrd:users", "users.json", users);
+}
+
+export async function loadSessions(): Promise<SessionRecord[]> {
+  return (await getJSON<SessionRecord[]>("alfrd:sessions", "sessions.json")) ?? [];
+}
+
+export async function saveSessions(sessions: SessionRecord[]): Promise<void> {
+  await setJSON("alfrd:sessions", "sessions.json", sessions);
+}
+
 // --- Poll Anchors ---
 
 export interface PollAnchors {

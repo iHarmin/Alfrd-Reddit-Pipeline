@@ -1,0 +1,18 @@
+[
+  {
+    "id": "3c5da15d-21f9-4073-85ac-257c7aa00d92",
+    "name": "Harmin Patel",
+    "email": "vaviyahr@gmail.com",
+    "passwordHash": "pbkdf2_sha512$120000$3c1509f2005e7d14d5ebca8ff256f662$1887e35d534ef1875e95204acd8667b2a335ef6c3cc6d2bd5f3130ae78339d095eab658823012c39975e675e4ff9451b1e7c69be7c5c9e110147550839aa60f5",
+    "created_at": "2026-06-14T18:06:57.405Z",
+    "password_reset_token": "f10c6aae8c2ba9b47bdbccd4d18ca432dc302b211eaa12b44fec5b4d7c0c5089",
+    "password_reset_token_expires_at": "2026-06-14T19:25:39.832Z"
+  },
+  {
+    "id": "1e63a152-a357-4b01-874d-7cf00f12f177",
+    "name": "Testing User",
+    "email": "testing@gmail.com",
+    "passwordHash": "pbkdf2_sha512$120000$18a57174d0420ccfa80874574e5045d1$9265a791b27c7e3159ed941b05beaf7537bbd3e930520e9b362d7fe14c06fb6381f19baaea1ba812ae31adc2dff1341268b1d3a189596347dda38c01d52e768b",
+    "created_at": "2026-06-14T18:08:50.441Z"
+  }
+]

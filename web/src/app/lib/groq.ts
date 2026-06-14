@@ -32,14 +32,21 @@ Keywords matched: ${post.matched_keywords.join(", ")}`;
 POST 1:
 RELEVANCE_SCORE: [1-10]
 REASONING: [one sentence]
-DRAFT_COMMENT: [your comment, 3-5 sentences]
+DRAFT_COMMENT: [your comment, 2-5 sentences]
 
 POST 2:
 RELEVANCE_SCORE: [1-10]
 REASONING: [one sentence]
-DRAFT_COMMENT: [your comment, 3-5 sentences]
+DRAFT_COMMENT: [your comment, 2-5 sentences]
 
 ...and so on for all ${posts.length} posts.
+
+Guidance for the draft comments:
+- Make each comment feel specific to that post’s main pain point.
+- If the post mentions bookkeeping, mention misclassification, reconciliation, or cleanup.
+- If the post mentions exports or tools, suggest verifying data before analysis.
+- If the post is a general finance question, still provide a concrete tip and avoid product mention unless relevance is 5+.
+- Vary the phrasing and the final ALFRD mention across posts. Avoid repeated patterns.
 
 Here are the posts:
 
@@ -53,7 +60,7 @@ ${postDescriptions}`;
         system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents: [{ parts: [{ text: userMessage }] }],
         generationConfig: {
-          temperature: 0.4,
+          temperature: 0.7,
           maxOutputTokens: 8000,
         },
       }),

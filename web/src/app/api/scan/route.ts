@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { scanSubreddits } from "../../lib/reddit";
 import { scorePosts } from "../../lib/groq";
+import { requireAuth } from "../../lib/auth";
 import type { StoredPost } from "../../lib/config";
 import { loadStoredPosts, saveStoredPosts } from "../../lib/storage";
 
@@ -10,13 +11,15 @@ export const maxDuration = 60;
 const SCORE_BATCH_SIZE = 10;
 
 export async function GET(request: Request) {
+  await requireAuth(request);
   const url = new URL(request.url);
   const mode = url.searchParams.get("mode") || "full"; // "full", "fetch", or "score"
 
-  // Purge posts older than 72 hours
+  // Purge only remaining posts older than 72 hours.
+  // Posts marked reviewed/replied/skipped are saved permanently.
   const cutoff = Math.floor(Date.now() / 1000) - 72 * 60 * 60;
   const allStored = await loadStoredPosts();
-  const existingPosts = allStored.filter((p) => p.created_utc >= cutoff);
+  const existingPosts = allStored.filter((p) => p.status !== "remaining" || p.created_utc >= cutoff);
   if (existingPosts.length < allStored.length) {
     await saveStoredPosts(existingPosts);
   }
